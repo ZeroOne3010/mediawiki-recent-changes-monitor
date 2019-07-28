@@ -7,11 +7,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.difflib.DiffUtils;
 import com.github.difflib.algorithm.jgit.HistogramDiff;
+import com.github.difflib.patch.AbstractDelta;
+import com.github.difflib.patch.DeltaType;
 import com.github.difflib.patch.Patch;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -100,7 +103,7 @@ public class RecentChangesMonitor {
       if (!edits.isEmpty()) {
         System.out.println("\nEdits of " + user + ": ");
         edits.forEach(edit -> {
-          System.out.println("\t" + edit);
+          System.out.println("\t" + format(edit));
           final long oldRevisionId = edit.getOldRevisionId();
           final long currentRevisionId = edit.getRevisionId();
 
@@ -117,7 +120,7 @@ public class RecentChangesMonitor {
                   getContentAsList(oldRevision),
                   getContentAsList(newRevision),
                   new HistogramDiff<>());
-              patch.getDeltas().forEach(delta -> System.out.println("\t\t" + delta));
+              patch.getDeltas().forEach(delta -> System.out.println("\t\t" + format(delta)));
             } catch (final Exception e) {
               throw new RuntimeException(e);
             }
@@ -125,6 +128,26 @@ public class RecentChangesMonitor {
         });
       }
     });
+  }
+
+  private static String format(final RecentChange edit) {
+    final String lengthDiff = new DecimalFormat("+0;-0").format(edit.getNewLength() - edit.getOldLength());
+    return String.format("%s %s%s: %s (%s) %s", edit.getTimestamp(), edit.getType(), formatLogInfo(edit),
+        edit.getTitle(), lengthDiff, edit.getComment());
+  }
+
+  private static String formatLogInfo(final RecentChange edit) {
+    if (edit.getLogAction() == null || edit.getLogType() == null) {
+      return "";
+    }
+    return String.format(" (%s: %s)", edit.getLogType(), edit.getLogAction());
+  }
+
+  private static String format(final AbstractDelta<String> delta) {
+    if (delta.getType() == DeltaType.CHANGE) {
+      return String.format("[ChangeDelta, lines:\n\t\t\t%s\n\t\t\t%s", delta.getSource(), delta.getTarget());
+    }
+    return delta.toString();
   }
 
   /**
