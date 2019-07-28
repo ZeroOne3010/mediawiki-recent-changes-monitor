@@ -1,7 +1,5 @@
 package io.github.zeroone3010.mediawiki.recentchangesmonitor;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -202,39 +200,5 @@ public class RecentChangesMonitor {
     }
     final RecentChangesMonitor patrol = new RecentChangesMonitor(args[0]);
     System.out.println(patrol.listEditsByNewUsers());
-  }
-
-
-  private static class QueryResponse {
-    final Query query;
-
-    public QueryResponse(@JsonProperty("query") Query query) {
-      this.query = query;
-    }
-
-    public Query getQuery() {
-      return query;
-    }
-  }
-
-
-  private static class Query {
-    private final List<RecentChange> recentChanges;
-    private final Map<Long, Page> pages;
-
-    @JsonCreator
-    public Query(@JsonProperty("recentchanges") List<RecentChange> recentChanges,
-                 @JsonProperty("pages") Map<Long, Page> pages) {
-      this.pages = pages;
-      this.recentChanges = recentChanges;
-    }
-
-    public List<RecentChange> getRecentChanges() {
-      return recentChanges;
-    }
-
-    public Map<Long, Page> getPages() {
-      return pages;
-    }
   }
 }
