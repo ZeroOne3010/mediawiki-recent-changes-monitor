@@ -30,12 +30,13 @@ public class RecentChangesMonitor {
   }
 
   /**
-   * The main method that does everything.
+   * Finds and returns edits by new users.
+   *
+   * @return A Map where the keys are user names and values are edits by those users.
    */
-  public String listEditsByNewUsers() {
+  public Map<String, List<RecentChange>> findEditsByNewUsers() {
     final List<RecentChange> recentChanges = mediaWiki.fetchRecentChanges();
-    final Map<String, List<RecentChange>> changesByNewUsers = findChangesByNewUsers(recentChanges);
-    return formatChangesByUser(changesByNewUsers);
+    return findChangesByNewUsers(recentChanges);
   }
 
   /**
@@ -68,12 +69,12 @@ public class RecentChangesMonitor {
    * Fetches the contents of the articles in the given Map of Recent Changes Lists.
    * Then creates a displayable String of the diffs between the old and new revisions of the articles.
    *
-   * @param changesByNewUsers A Map where the key is the user name and the value is a list of their edits.
+   * @param changesPerUser A Map where the key is the user name and the value is a list of their edits.
    * @return A human-readable String of the changes by the given users.
    */
-  private String formatChangesByUser(final Map<String, List<RecentChange>> changesByNewUsers) {
+  private String formatChangesPerUser(final Map<String, List<RecentChange>> changesPerUser) {
     final StringBuffer result = new StringBuffer();
-    changesByNewUsers.forEach((user, edits) -> {
+    changesPerUser.forEach((user, edits) -> {
       if (!edits.isEmpty()) {
         result.append("\nEdits of ").append(user).append(":\n");
         edits.forEach(edit -> {
@@ -122,17 +123,17 @@ public class RecentChangesMonitor {
     return delta.toString();
   }
 
-
   private List<String> getContentAsList(final Revision revision) {
     return Arrays.asList(revision.getContent().split("\n"));
   }
-
 
   public static void main(final String... args) {
     if (args == null || args.length != 1) {
       throw new IllegalArgumentException("Give the URL of the api.php as the sole argument to this program.");
     }
     final RecentChangesMonitor patrol = new RecentChangesMonitor(args[0]);
-    System.out.println(patrol.listEditsByNewUsers());
+    final Map<String, List<RecentChange>> changesByNewUsers = patrol.findEditsByNewUsers();
+    final String formattedEdits = patrol.formatChangesPerUser(changesByNewUsers);
+    System.out.println(formattedEdits);
   }
 }
