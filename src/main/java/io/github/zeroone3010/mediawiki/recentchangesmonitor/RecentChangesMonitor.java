@@ -43,10 +43,10 @@ public class RecentChangesMonitor {
   /**
    * The main method that does everything.
    */
-  public void reportEditsByNewUsers() {
+  public String listEditsByNewUsers() {
     final List<RecentChange> recentChanges = fetchRecentChanges();
     final Map<String, List<RecentChange>> changesByNewUsers = findChangesByNewUsers(recentChanges);
-    printChangesByUser(changesByNewUsers);
+    return formatChangesByUser(changesByNewUsers);
   }
 
   /**
@@ -94,16 +94,18 @@ public class RecentChangesMonitor {
 
   /**
    * Fetches the contents of the articles in the given Map of Recent Changes Lists.
-   * The displays the diffs between the old and new revisions of the articles.
+   * Then creates a displayable String of the diffs between the old and new revisions of the articles.
    *
    * @param changesByNewUsers A Map where the key is the user name and the value is a list of their edits.
+   * @return A human-readable String of the changes by the given users.
    */
-  private void printChangesByUser(final Map<String, List<RecentChange>> changesByNewUsers) {
+  private String formatChangesByUser(final Map<String, List<RecentChange>> changesByNewUsers) {
+    final StringBuffer result = new StringBuffer();
     changesByNewUsers.forEach((user, edits) -> {
       if (!edits.isEmpty()) {
-        System.out.println("\nEdits of " + user + ": ");
+        result.append("\nEdits of ").append(user).append(":\n");
         edits.forEach(edit -> {
-          System.out.println("\t" + format(edit));
+          result.append('\t').append(format(edit)).append("\n");
           final long oldRevisionId = edit.getOldRevisionId();
           final long currentRevisionId = edit.getRevisionId();
 
@@ -120,7 +122,7 @@ public class RecentChangesMonitor {
                   getContentAsList(oldRevision),
                   getContentAsList(newRevision),
                   new HistogramDiff<>());
-              patch.getDeltas().forEach(delta -> System.out.println("\t\t" + format(delta)));
+              patch.getDeltas().forEach(delta -> result.append("\t\t").append(format(delta)).append("\n"));
             } catch (final Exception e) {
               throw new RuntimeException(e);
             }
@@ -128,6 +130,7 @@ public class RecentChangesMonitor {
         });
       }
     });
+    return result.toString();
   }
 
   private static String format(final RecentChange edit) {
@@ -198,7 +201,7 @@ public class RecentChangesMonitor {
       throw new IllegalArgumentException("Give the URL of the api.php as the sole argument to this program.");
     }
     final RecentChangesMonitor patrol = new RecentChangesMonitor(args[0]);
-    patrol.reportEditsByNewUsers();
+    System.out.println(patrol.listEditsByNewUsers());
   }
 
 
