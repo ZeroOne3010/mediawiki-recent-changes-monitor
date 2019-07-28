@@ -1,17 +1,11 @@
 package io.github.zeroone3010.mediawiki.recentchangesmonitor;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.difflib.DiffUtils;
 import com.github.difflib.algorithm.jgit.HistogramDiff;
 import com.github.difflib.patch.AbstractDelta;
 import com.github.difflib.patch.DeltaType;
 import com.github.difflib.patch.Patch;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,42 +20,22 @@ import java.util.Map;
  */
 public class RecentChangesMonitor {
   private static final String USER_SPACE_PREFIX = "User:";
-  private final ObjectMapper objectMapper = new ObjectMapper();
-  private final String apiUrl;
+  private final MediaWiki mediaWiki;
 
   /**
    * @param apiUrl The URL of the api.php service of the target MediaWiki instance.
    */
   public RecentChangesMonitor(final String apiUrl) {
-    this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    this.objectMapper.registerModule(new JavaTimeModule());
-    this.apiUrl = apiUrl;
+    this.mediaWiki = new MediaWiki(apiUrl);
   }
 
   /**
    * The main method that does everything.
    */
   public String listEditsByNewUsers() {
-    final List<RecentChange> recentChanges = fetchRecentChanges();
+    final List<RecentChange> recentChanges = mediaWiki.fetchRecentChanges();
     final Map<String, List<RecentChange>> changesByNewUsers = findChangesByNewUsers(recentChanges);
     return formatChangesByUser(changesByNewUsers);
-  }
-
-  /**
-   * @return List of Recent Changes.
-   */
-  private List<RecentChange> fetchRecentChanges() {
-    final URL recentChangesUrl;
-    try {
-      recentChangesUrl = new URL(apiUrl + "?action=query" +
-          "&list=recentchanges" +
-          "&rclimit=100" +
-          "&format=json" +
-          "&rcprop=user|userid|comment|title|ids|sizes|flags|timestamp|loginfo");
-      return objectMapper.readValue(recentChangesUrl, QueryResponse.class).getQuery().getRecentChanges();
-    } catch (final Exception e) {
-      throw new RuntimeException(e);
-    }
   }
 
   /**
@@ -109,10 +83,7 @@ public class RecentChangesMonitor {
 
           if (oldRevisionId > 0L && currentRevisionId > 0L) {
             try {
-              final List<Revision> revisions = fetchRevisions(edit);
-
-              assert revisions.size() == 2 : "Something is not right, there should be two revisions.";
-
+              final List<Revision> revisions = mediaWiki.fetchRevisions(edit);
               final Revision oldRevision = revisions.get(0);
               final Revision newRevision = revisions.get(1);
 
@@ -151,48 +122,11 @@ public class RecentChangesMonitor {
     return delta.toString();
   }
 
-  /**
-   * Fetches the old and new contents of the article in the given Recent Change.
-   *
-   * @param edit A RecentChange of whose contents one is interested in.
-   * @return A List of two items where the first item is the older version
-   * and the second item is the newer version of the article.
-   */
-  private List<Revision> fetchRevisions(final RecentChange edit) {
-    final URL revisionsUrl;
-    try {
-      revisionsUrl = new URL(apiUrl + "?action=query" +
-          "&format=json" +
-          "&titles=" + encode(edit.getTitle()) +
-          "&rvstartid=" + edit.getOldRevisionId() +
-          "&rvendid=" + edit.getRevisionId() +
-          "&rvdir=newer" +
-          "&prop=revisions" +
-          "&rvprop=ids|timestamp|user|comment|content" +
-          "&rvdir=newer");
-
-      final Map<Long, Page> pages = objectMapper.readValue(revisionsUrl, QueryResponse.class).getQuery().getPages();
-      final List<Revision> revisions = pages.get(edit.getPageId()).getRevisions();
-
-      assert revisions.size() == 2 : "Something is not right, there should be two revisions.";
-
-      return pages.get(edit.getPageId()).getRevisions();
-    } catch (final Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
 
   private List<String> getContentAsList(final Revision revision) {
     return Arrays.asList(revision.getContent().split("\n"));
   }
 
-  private static String encode(final String string) {
-    try {
-      return URLEncoder.encode(string, "UTF-8");
-    } catch (final UnsupportedEncodingException e) {
-      throw new RuntimeException(e);
-    }
-  }
 
   public static void main(final String... args) {
     if (args == null || args.length != 1) {
