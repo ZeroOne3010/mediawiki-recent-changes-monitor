@@ -1,3 +1,7 @@
+### Application specific
+*_rcId
+*_logId
+
 ### Intellij ###
 .idea/
 *.iml

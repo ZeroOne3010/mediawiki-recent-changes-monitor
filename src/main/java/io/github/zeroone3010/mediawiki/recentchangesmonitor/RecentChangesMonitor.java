@@ -6,13 +6,26 @@ import com.github.difflib.patch.AbstractDelta;
 import com.github.difflib.patch.DeltaType;
 import com.github.difflib.patch.Patch;
 
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.OptionalLong;
+import java.util.function.Function;
+import java.util.stream.Stream;
+
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static java.nio.file.StandardOpenOption.WRITE;
 
 /**
  * An application to monitor the Recent Changes list of a given MediaWiki instance and to report the edits
@@ -127,13 +140,82 @@ public class RecentChangesMonitor {
     return Arrays.asList(revision.getContent().split("\n"));
   }
 
+  private static long findLatestStoredRcId(final String wikiName) {
+    return findStoredWikiValue(wikiName, "_rcId");
+  }
+
+  private static long findLatestStoredLogId(final String wikiName) {
+    return findStoredWikiValue(wikiName, "_logId");
+  }
+
+  private static long findStoredWikiValue(final String wikiName, final String suffix) {
+    try {
+      return Long.valueOf(Files.readAllLines(Paths.get(wikiName + suffix)).get(0));
+    } catch (final Exception e) {
+      System.err.println(e);
+      return -1;
+    }
+  }
+
+  private static void storeWikiValue(final String wikiName, final String suffix, final long value) {
+    try {
+      Files.write(Paths.get(wikiName + suffix), Collections.singleton(String.valueOf(value)),
+          WRITE, CREATE, TRUNCATE_EXISTING);
+    } catch (final Exception e) {
+      System.err.println(e);
+    }
+  }
+
+  private static OptionalLong findMaxValue(final Map<String, List<RecentChange>> changesPerUser,
+                                           final Function<RecentChange, Long> longExtractor) {
+    return findMaxValue(changesPerUser.values().stream().flatMap(Collection::stream), longExtractor);
+  }
+
+  private static OptionalLong findMaxValue(final Stream<RecentChange> recentChanges,
+                                           final Function<RecentChange, Long> longExtractor) {
+    return recentChanges
+        .map(longExtractor)
+        .filter(Objects::nonNull)
+        .mapToLong(l -> l)
+        .max();
+  }
+
+  private static String getWikiHostName(final String apiUrl) {
+    try {
+      return new URL(apiUrl).getHost();
+    } catch (final MalformedURLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   public static void main(final String... args) {
     if (args == null || args.length != 1) {
       throw new IllegalArgumentException("Give the URL of the api.php as the sole argument to this program.");
     }
-    final RecentChangesMonitor patrol = new RecentChangesMonitor(args[0]);
+    final String apiUrl = args[0];
+    final RecentChangesMonitor patrol = new RecentChangesMonitor(apiUrl);
     final Map<String, List<RecentChange>> changesByNewUsers = patrol.findEditsByNewUsers();
-    final String formattedEdits = patrol.formatChangesPerUser(changesByNewUsers);
+
+    final String wikiHostName = getWikiHostName(apiUrl);
+    final long lastSeenRecentChangeId = findLatestStoredRcId(wikiHostName);
+    final long lastSeenLogId = findLatestStoredLogId(wikiHostName);
+
+    final Map<String, List<RecentChange>> filteredChangesByNewUsers = new HashMap<>();
+    changesByNewUsers.forEach((user, edits) -> {
+      final long maxRcId = findMaxValue(edits.stream(), RecentChange::getRecentChangeId).orElse(-1L);
+      final long maxLogId = findMaxValue(edits.stream(), RecentChange::getLogId).orElse(-1L);
+      if (maxRcId > lastSeenRecentChangeId || maxLogId > lastSeenLogId) {
+        filteredChangesByNewUsers.put(user, edits);
+      }
+    });
+    final String formattedEdits = patrol.formatChangesPerUser(filteredChangesByNewUsers);
+
     System.out.println(formattedEdits);
+
+    final long maxRecentChangeId = findMaxValue(changesByNewUsers, RecentChange::getRecentChangeId).orElse(-1L);
+    final long maxLogId = findMaxValue(changesByNewUsers, RecentChange::getLogId).orElse(-1L);
+
+    storeWikiValue(wikiHostName, "_rcId", maxRecentChangeId);
+    storeWikiValue(wikiHostName, "_logId", maxLogId);
   }
 }
