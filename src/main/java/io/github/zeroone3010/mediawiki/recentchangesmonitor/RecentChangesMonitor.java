@@ -29,7 +29,7 @@ import static java.nio.file.StandardOpenOption.WRITE;
 
 /**
  * An application to monitor the Recent Changes list of a given MediaWiki instance and to report the edits
- * of any new users.
+ * of any new and anonymous users.
  */
 public class RecentChangesMonitor {
   private static final String USER_SPACE_PREFIX = "User:";
@@ -43,39 +43,41 @@ public class RecentChangesMonitor {
   }
 
   /**
-   * Finds and returns edits by new users.
+   * Finds and returns edits by new and anonymous users.
    *
    * @return A Map where the keys are user names and values are edits by those users.
    */
-  public Map<String, List<RecentChange>> findEditsByNewUsers() {
+  public Map<String, List<RecentChange>> findEditsByNewAndAnonymousUsers() {
     final List<RecentChange> recentChanges = mediaWiki.fetchRecentChanges();
-    return findChangesByNewUsers(recentChanges);
+    return findChangesByNewAndAnonymousUsers(recentChanges);
   }
 
   /**
-   * Finds any new users, then returns the changes they made.
+   * Finds any new and anonymous users, then returns the changes they made.
    *
    * @param recentChanges A list of Recent Changes.
    * @return A Map where the key is the user name and the value is a list of their edits.
    */
-  private Map<String, List<RecentChange>> findChangesByNewUsers(final List<RecentChange> recentChanges) {
-    final Map<String, List<RecentChange>> changesByNewUsers = new HashMap<>();
+  private Map<String, List<RecentChange>> findChangesByNewAndAnonymousUsers(final List<RecentChange> recentChanges) {
+    final Map<String, List<RecentChange>> result = new HashMap<>();
     recentChanges.forEach(rc -> {
       if (rc.getType() == RecentChange.ChangeType.NEW && rc.getTitle().startsWith(USER_SPACE_PREFIX)) {
-        changesByNewUsers.put(rc.getTitle().substring(USER_SPACE_PREFIX.length()), new ArrayList<>());
+        result.put(rc.getTitle().substring(USER_SPACE_PREFIX.length()), new ArrayList<>());
+      } else if (rc.getUserId() == 0L) {
+        result.put(rc.getUser(), new ArrayList<>());
       }
     });
 
     recentChanges.forEach(rc -> {
-          if (changesByNewUsers.keySet().contains(rc.getUser())) {
-            changesByNewUsers.merge(rc.getUser(), new ArrayList<>(Collections.singleton(rc)), (a, b) -> {
-              a.addAll(b);
-              return a;
-            });
-          }
+      if (result.keySet().contains(rc.getUser())) {
+        result.merge(rc.getUser(), new ArrayList<>(Collections.singleton(rc)), (a, b) -> {
+          a.addAll(b);
+          return a;
+        });
+      }
         }
     );
-    return changesByNewUsers;
+    return result;
   }
 
   /**
@@ -194,7 +196,7 @@ public class RecentChangesMonitor {
     }
     final String apiUrl = args[0];
     final RecentChangesMonitor patrol = new RecentChangesMonitor(apiUrl);
-    final Map<String, List<RecentChange>> changesByNewUsers = patrol.findEditsByNewUsers();
+    final Map<String, List<RecentChange>> changesByNewUsers = patrol.findEditsByNewAndAnonymousUsers();
 
     final String wikiHostName = getWikiHostName(apiUrl);
     final long lastSeenRecentChangeId = findLatestStoredRcId(wikiHostName);
